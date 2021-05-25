@@ -38,11 +38,19 @@ public interface Constantes {
         public int getPrecio(TipoProducto tipo) {
             // Identifico el producto
             int producto = 0;
-            for (int i = 0; i < 10; i++)
+            for (int i = 0; i < TIPOS.length; i++)
                 if (TIPOS[i].equals(tipo)) 
                     producto = i;
             
            return aleatorio.nextInt(TIPOS[producto].variacion) + PRECIO_MINIMO;
+        }
+        
+        /**
+         * Nos devuelve un tiempo aleatorio dependiendo de su tipo
+         * @return Precio
+         */
+        public long getTiempo() {            
+           return aleatorio.nextInt(VARIACION_PUJAS) + TIEMPO_PUJAS;
         }
     }
     
@@ -51,10 +59,12 @@ public interface Constantes {
     
     // Constantes del problema
     public static final int PRECIO_MINIMO = 1;
-    public static final int TIEMPO_SIMULADO = 1; // segundos
-    public static final int TIEMPO_ESPERA = 30; // segundos
-    public static final int NUM_VENDEDORES = 20;
-    public static final int NUM_COMPRADORES = 25;
-    public static final int NUM_PRODUCTOS = 7;
-    public static final int DINERO = 700;
+    public static final int TIEMPO_PUJAS = 1000; // milisegundos
+    public static final int VARIACION_PUJAS = 2000; // milisegundos
+    public static final int ESPERA_COMPRADOR = 500; // milisegundos
+    public static final int TIEMPO_SUBASTA = 25000; // milisegundos, 3 min
+    public static final int NUM_VENDEDORES = 10;
+    public static final int NUM_COMPRADORES = 15;
+    public static final int NUM_PRODUCTOS = 5;
+    public static final int DINERO = 1200;
 }

@@ -10,12 +10,12 @@ import ujaen.es.mercauja.Constantes.TipoProducto;
  */
 public class Producto {
     // Variables
-    private TipoProducto tipo;
-    private int indice; // Para el comprador
+    private final TipoProducto tipo;
     private int precioActual;
-    private Vendedor vendedor;
     private Comprador comprador;
     private boolean vendido;
+    private long puestoEnVenta;
+    private long tiempo;
     
     // Excusión mutua para el precio
     private final ReentrantLock lock;
@@ -23,22 +23,19 @@ public class Producto {
     // Sinconización con Vendedor
     private final CountDownLatch esperaVentas;
     
-    
     /**
      * Constructor de producto para vendedor
      * @param tipo Tipo de producto a crear
-     * @param vendedor Nombre del vendedor
      * @param esperaVentas CountDownLatch para la sinconización con Vendedor
      */
-    public Producto( TipoProducto tipo, Vendedor vendedor, CountDownLatch esperaVentas) {
+    public Producto( TipoProducto tipo, CountDownLatch esperaVentas) {
         this.tipo = tipo;
-        this.indice = -1;
         this.precioActual = tipo.getPrecio(tipo);
-        this.vendedor = vendedor;
         this.comprador = null;
         this.vendido = false;
         this.lock = new ReentrantLock();
         this.esperaVentas = esperaVentas;
+        this.tiempo = tipo.getTiempo();
     }
 
     /**
@@ -47,23 +44,8 @@ public class Producto {
      */
     public Producto(TipoProducto tipo) {
         this.tipo = tipo;
-        this.indice = -1;
-        this.vendedor = null;
         this.lock = null;
         this.esperaVentas = null;
-    }
-
-    /**
-     * Copia la información del producto original
-     * @param original Producto del que se va a copiar la información
-     */
-    public void copiaProducto(Producto original){
-        this.tipo = original.tipo;
-        this.indice = original.indice;
-        this.precioActual = original.precioActual;
-        this.vendedor = original.vendedor;
-        this.comprador = original.comprador;
-        this.vendido = original.vendido;
     }
     
     /**
@@ -71,21 +53,6 @@ public class Producto {
      */
     public TipoProducto getTipo() {
         return tipo;
-    }
-
-    /**
-     * @return Índice del producto original que se desea comprar
-     */
-    public int getIndice() {
-        return indice;
-    }
-    
-    /**
-     * Establece el índice del producto original que se desea comprar
-     * @param indice Índice del producto original que se desea comprar
-     */
-    public void setIndice(int indice) {
-        this.indice = indice;
     }
 
     /**
@@ -102,17 +69,24 @@ public class Producto {
 
     /**
      * Establece el precio actual para el producto en función de la puja más alta
-     * @param precioActual Valor de la puja mas alta actual
      * @param comprador Comprador que realiza la puja
+     * @return True si la puja se realizo correctamente, False en caso contrario
      */
-    public void pujar(int precioActual, Comprador comprador) {
+    public boolean pujar(Comprador comprador) {
+        boolean Ok = false;
         lock.lock();  // Bloquea mientras se edita el precio
         try {
-            this.precioActual = precioActual;
-            this.comprador = comprador;
+            if( equalComprador(comprador))
+                Ok = true;
+            else if(comprador.getDinero() > precioActual){
+                precioActual++;
+                this.comprador = comprador;
+                Ok = true;
+            }
         } finally {
             lock.unlock();
         }
+        return Ok;
     }
 
     /**
@@ -134,6 +108,8 @@ public class Producto {
         lock.lock();  // Bloquea mientras se edita el precio
         try {
             this.vendido = true;
+            if(this.comprador != null)
+                this.comprador.notificarCompra(this);
         } finally {
             if(esperaVentas != null) 
                 esperaVentas.countDown();
@@ -141,4 +117,30 @@ public class Producto {
         }
     }
     
+    /**
+     * Funcion que compara dos compradores para determinar si son el mismo
+     * @param comprador Nuevo comprador
+     * @return True si son el mismo, false en caso contrario
+     */
+    public boolean equalComprador(Comprador comprador){
+        return  this.comprador != null ? this.comprador.equals(comprador) : false;
+    }
+
+    /**
+     * Establece el tiempo actual como el tiempo en que se puso a la venta
+     */
+    public void setPuestoEnVenta() {
+        this.puestoEnVenta = System.currentTimeMillis();
+    }
+    
+    public boolean tiempoVencido(){
+        return tiempo <= System.currentTimeMillis()-puestoEnVenta;
+    }
+
+    /**
+     * @return the comprador
+     */
+    public Comprador getComprador() {
+        return comprador;
+    }
 }

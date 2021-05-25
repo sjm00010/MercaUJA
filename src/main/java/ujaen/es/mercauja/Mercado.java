@@ -1,9 +1,12 @@
 package ujaen.es.mercauja;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
-import ujaen.es.mercauja.Constantes.TipoProducto;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Clase runnable que representa la subasta
@@ -11,71 +14,18 @@ import ujaen.es.mercauja.Constantes.TipoProducto;
  */
 public class Mercado implements Runnable {
     // Variables
-    private List<Producto> catalogo;
-    private List<String> registro;
-    
-    // Excusión mutua para la modificación del catalogo
-    private final ReentrantLock lock;
+    private final List<String> registro;
+    private final List<Resultado> ranking;
+    private final CompletionService<Resultado> service;
+    private final ExecutorService ejecutor;
+    private final Catalogo memoria;
 
-    public Mercado() {
-        this.catalogo = new ArrayList<>();
+    public Mercado(ExecutorService ejecutorCompletionService, CompletionService<Resultado> service, Catalogo memoria) {
         this.registro = new ArrayList<>();
-        this.lock = new ReentrantLock();
-    }
-
-    /**
-     * Devuelve un Producto del tipo por el que esta interesado el comprador
-     * @param pInteresado Tipo de producto por el que esta interesado
-     * @return Indice del producto del tipo interesado, -1 si no hay ninguno
-     */
-    public Integer getProductoCatalogo(TipoProducto pInteresado) {
-        return catalogo.indexOf(catalogo.stream()
-                       .filter( (p) -> p.getTipo() == pInteresado )
-                       .findFirst()
-                       .orElse(null));
-    }
-    
-    /**
-     * Permite obtener el precio de un producto
-     * @param producto Índice del producto
-     * @param tipoEsperado Tipo de producto esperado
-     * @return Precio del producto, 0 si ya fue vendido
-     */
-    public Integer getPrecioProducto(int producto, TipoProducto tipoEsperado){
-        int precio = 0;
-        if(tipoEsperado == catalogo.get(producto).getTipo()){
-            precio = catalogo.get(producto).getPrecioActual();
-        }
-        return precio;
-    }
-    
-    /**
-     * Función para pujar por un producto
-     * @param producto Índice del producto por el que se quiere pujar
-     * @param newPrecio Nuevo precio de la puja
-     * @param comprador Comprador que realiza la puja
-     * @param tipoEsperado Tipo de producto esperado
-     * @return True si se pujo correctamente, False si el producto ya fue vendido
-     */
-    public boolean pujaProducto(int producto ,int newPrecio, Comprador comprador, TipoProducto tipoEsperado){
-        boolean resultado = tipoEsperado == catalogo.get(producto).getTipo();
-        if(resultado){
-            catalogo.get(producto).pujar(newPrecio, comprador);
-        }
-        return resultado;
-    }
-
-    /**
-     * Añade al catalogo los productos de un nuevo vendedor
-     * @param nuevosProductos Lista de nuevos productos a la venta
-     */
-    public void addProductosCatalogo(List<Producto> nuevosProductos) {
-        lock.lock();  // Bloquea mientras se edita el catalogo
-        try {
-            catalogo.addAll(nuevosProductos);
-        } finally {
-            lock.unlock();
-        }
+        this.ranking = new ArrayList<>();
+        this.ejecutor = ejecutorCompletionService;
+        this.service = service;
+        this.memoria = memoria;
     }
 
     /**
@@ -84,7 +34,8 @@ public class Mercado implements Runnable {
     public String getRegistro() {
         return registro.stream()
                        .map(entrada -> entrada + " \n ")
-                       .reduce(String::concat).orElse("");
+                       .reduce(String::concat)
+                       .orElse("");
     }
 
     /**
@@ -95,8 +46,110 @@ public class Mercado implements Runnable {
         this.registro.add(entrada);
     }
     
+    /**
+     * Obtiene los resultados de los Vendedores y Compradores tras cerrar el mercado
+     * @throws InterruptedException Excepción lanzada por la interrupción del hilo
+     * @throws ExecutionException Excepción lanzada por la interrupción del hilo
+     */
+    private void obtenerResultados() throws InterruptedException, ExecutionException {
+        Resultado resultado;
+        resultado = service.take().get();
+        ranking.add(resultado);               
+    }
+    
+    /**
+     * Función que presenta el ranking de los vendedores
+     */
+    private void rankingVendedores(){
+        List<Resultado> listaVendedores = 
+            ranking.stream()
+                   .filter( r -> r.esVendedor())
+                   .sorted((o1, o2) -> {
+                        int resultado = 0;
+                        if(o1.getTotalProductos() == o2.getTotalProductos()){
+                            resultado = o1.getDinero() > o2.getDinero() ? -1 : 1;
+                        }else{
+                            resultado = o1.getTotalProductos() > o2.getTotalProductos() ? -1 : 1;
+                        }
+
+                        return resultado;
+                    })
+                    .toList();
+        System.out.println("MERCADO : Ranking de los vendedores");
+        for (int i = 0; i < listaVendedores.size(); i++) {
+            System.out.println("Posición "+(i+1)+" : "+ listaVendedores.get(i).getNombre() + 
+                    " | Productos vendidos: "+ listaVendedores.get(i).getTotalProductos() +
+                    " | Dinero ganado: "+ listaVendedores.get(i).getDinero());
+        }
+    }
+    
+    /**
+     * Función que presenta el ranking de los compradores
+     */
+    private void rankingCompradores(){
+        List<Resultado> listaCompradores = 
+            ranking.stream()
+                   .filter( r -> !r.esVendedor())
+                   .sorted((o1, o2) -> {
+                        int resultado = 0;
+                        if(o1.getTotalProductos() == o2.getTotalProductos()){
+                            resultado = o1.getDinero() > o2.getDinero() ? -1 : 1;
+                        }else{
+                            resultado = o1.getTotalProductos() > o2.getTotalProductos() ? -1 : 1;
+                        }
+
+                        return resultado;
+                    })
+                    .toList();
+        System.out.println("MERCADO : Ranking de los compradores");
+        for (int i = 0; i < listaCompradores.size(); i++) {
+            System.out.println("Posición "+(i+1)+" : "+ listaCompradores.get(i).getNombre() + 
+                    " | Productos comprados: "+ listaCompradores.get(i).getTotalProductos() +
+                    " | Dinero gastado: "+ listaCompradores.get(i).getDinero());
+        }
+    }
+    
     @Override
     public void run() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        // Variables
+        long inicio;
+        
+        // Ejecución del hilo
+        System.out.println("MERCADO comienza la ejecución");
+        
+        // Inicialización de las variables para la prueba
+        inicio = System.currentTimeMillis();
+        
+        try {
+            
+            // Inicio el bucle para ir comprobando el estado de los productos del catalogo
+            while(System.currentTimeMillis()-inicio < Constantes.TIEMPO_SUBASTA){
+                memoria.catalogo.stream()
+                                .filter(p -> !p.isVendido())
+                                .toList()
+                                .forEach(p -> {
+                                    if(p.tiempoVencido()){
+                                        p.setVendido();
+                                        addRegistro("Se ha vendido el producto: "+p.toString());
+                                    }
+                });
+            }
+        
+            System.out.println("MERCADO ha CERRADO, va a cancelar las operaciones restantes");
+            ejecutor.shutdownNow();
+                    
+            for (int i = 0; i < Constantes.NUM_COMPRADORES + Constantes.NUM_VENDEDORES; i++) {
+                obtenerResultados();
+            }
+            
+            System.out.println("MERCADO va ha presentar los rankins");
+            rankingVendedores();
+            rankingCompradores();
+		
+            // Finalización del hilo
+            System.out.println("MERCADO ha finalizado la ejecución");
+        } catch (InterruptedException | ExecutionException ex) {
+            System.out.println("MERCADO ha CANCELADO su ejecución");
+        }
     }
 }
