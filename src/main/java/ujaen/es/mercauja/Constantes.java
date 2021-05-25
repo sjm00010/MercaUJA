@@ -65,6 +65,6 @@ public interface Constantes {
     public static final int TIEMPO_SUBASTA = 25000; // milisegundos, 3 min
     public static final int NUM_VENDEDORES = 10;
     public static final int NUM_COMPRADORES = 15;
-    public static final int NUM_PRODUCTOS = 5;
-    public static final int DINERO = 1200;
+    public static final int NUM_PRODUCTOS = 20;
+    public static final int DINERO = 800;
 }

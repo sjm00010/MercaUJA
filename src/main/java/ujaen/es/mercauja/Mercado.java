@@ -1,12 +1,10 @@
 package ujaen.es.mercauja;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Clase runnable que representa la subasta
@@ -117,7 +115,7 @@ public class Mercado implements Runnable {
         // Ejecución del hilo
         System.out.println("MERCADO comienza la ejecución");
         
-        // Inicialización de las variables para la prueba
+        // Inicialización de las variables
         inicio = System.currentTimeMillis();
         
         try {

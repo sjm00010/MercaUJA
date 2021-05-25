@@ -37,16 +37,6 @@ public class Producto {
         this.esperaVentas = esperaVentas;
         this.tiempo = tipo.getTiempo();
     }
-
-    /**
-     * Constructor de producto para comprador
-     * @param tipo Tipo de producto a crear
-     */
-    public Producto(TipoProducto tipo) {
-        this.tipo = tipo;
-        this.lock = null;
-        this.esperaVentas = null;
-    }
     
     /**
      * @return Tipo del producto
@@ -133,6 +123,10 @@ public class Producto {
         this.puestoEnVenta = System.currentTimeMillis();
     }
     
+    /**
+     * Indica se el tiempo de puesta a la venta
+     * @return True si el tiempo se ha cumplido, False en caso contrario
+     */
     public boolean tiempoVencido(){
         return tiempo <= System.currentTimeMillis()-puestoEnVenta;
     }
