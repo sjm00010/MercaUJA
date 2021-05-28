@@ -10,7 +10,6 @@ import ujaen.es.mercauja.Constantes.TipoProducto;
  * @author sjm00010
  */
 public class Producto {
-
     // Variables
     private final TipoProducto tipo;
     private int precioActual;

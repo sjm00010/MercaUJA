@@ -20,7 +20,7 @@ public class Mercado implements Runnable {
     private final List<Producto> catalogo;
     private final List<String> registro;
     
-    // Sinconización
+    // Sincronización
     private final CountDownLatch avisaFinalizacion;
     
     // Ejecución de los servicios
