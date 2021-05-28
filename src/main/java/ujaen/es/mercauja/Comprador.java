@@ -45,7 +45,9 @@ public class Comprador implements Runnable {
                                     masBarato = i;
                                 }
                             }
-                            posiblesProductos.add(productos.get(masBarato));
+                            
+                            if(!productos.isEmpty())
+                                posiblesProductos.add(productos.get(masBarato));
                         });
         
         int masBarato = 0;
@@ -55,7 +57,7 @@ public class Comprador implements Runnable {
             }
         }
         
-        return posiblesProductos.get(masBarato);
+        return !posiblesProductos.isEmpty() ? posiblesProductos.get(masBarato) : null;
     }
     
     /**
@@ -63,7 +65,8 @@ public class Comprador implements Runnable {
      */
     private void pujar(){
         Producto puja = buscarProductos();
-        puja.pujar(this, puja.getPrecioActual()+1);
+        if(puja != null)
+            mercado.pujar(this, puja, puja.getPrecioActual()+1);
     }
     
     /**
@@ -75,7 +78,6 @@ public class Comprador implements Runnable {
         if(indice != -1){ 
             productosDeseados.remove(indice); // Elimino el producto de la lista de deseados
             productosComprados.add(comprado);
-            dinero -= comprado.getPrecioActual();
         }else{ // No deberia de producirse nunca
             System.out.println( name + " ERROR AL NOTIFICAR LA COMPRA");
         }
@@ -90,13 +92,13 @@ public class Comprador implements Runnable {
         int comprados = productosComprados.size(), cancelados = productosDeseados.size();
         
         if(productosComprados.isEmpty())
-            System.out.println(name + " PRODUCTOS COMPRADOS : NADA | DINERO RESTANTE : "+dinero+" €");
+            System.out.println(name + " PRODUCTOS COMPRADOS : NADA | DINERO RESTANTE : "+Constantes.DINERO+" €");
         else{
             int ganancia = 0;
             ganancia = productosComprados.stream()
                                          .map(producto -> producto.getPrecioActual())
                                          .reduce(ganancia, Integer::sum);
-            System.out.println(name + " PRODUCTOS COMPRADOS : "+(comprados == Constantes.NUM_PRODUCTOS ? "TODOS" : comprados)+" | DINERO RESTANTE : "+ganancia+" €");
+            System.out.println(name + " PRODUCTOS COMPRADOS : "+(comprados == Constantes.NUM_PRODUCTOS ? "TODOS" : comprados)+" | DINERO GASTADO : "+ganancia+" €");
         }
         
         if(cancelados != 0)
@@ -137,5 +139,24 @@ public class Comprador implements Runnable {
      */
     public int getDinero() {
         return dinero;
+    }
+
+    /**
+     * Función que retira el dinero como deposito al realizar una puja
+     * @param deposito Cantidad de dinero pujado
+     */
+    public void realizarDeposito(int deposito) {
+        if(this.dinero >= deposito)
+            this.dinero -= deposito;
+        else
+            System.out.println( name + " ERROR AL REALIZAR UN DEPÓSITO PARA UNA PUJA");
+    }
+    
+    /**
+     * Función que devuelve el dinero como deposito de realizar una puja
+     * @param deposito Cantidad de dinero devuelto
+     */
+    public void devolverDeposito(int deposito) {
+        this.dinero += deposito;
     }
 }

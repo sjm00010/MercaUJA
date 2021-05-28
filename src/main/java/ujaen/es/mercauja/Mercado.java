@@ -55,11 +55,19 @@ public class Mercado implements Runnable {
      * @return Lista de productos que cumplen las condiciones
      */
     public List<Producto> buscarProductos(TipoProducto tipoBuscado, int precioMax){
-        return catalogo.stream()
-                       .filter( p -> !p.isVendido() && 
-                                      p.getTipo().equals(tipoBuscado) &&
-                                      p.getPrecioActual() < precioMax)
-                       .toList();
+        List<Producto> resultado;
+        lockCatalogo.lock();
+        try {
+            resultado =
+                    catalogo.stream()
+                            .filter( p -> !p.isVendido() &&
+                                    p.getTipo().equals(tipoBuscado) &&
+                                    p.getPrecioActual() < precioMax)
+                            .toList();
+        } finally {
+            lockCatalogo.unlock();
+        }
+        return resultado;
     }
     
     /**
@@ -183,7 +191,7 @@ public class Mercado implements Runnable {
                 else
                     sol = 1;
             }else if(Integer.parseInt(o1.get(2)) != Integer.parseInt(o2.get(2))){
-                if(Integer.parseInt(o1.get(2)) > Integer.parseInt(o2.get(2)))
+                if(Integer.parseInt(o1.get(2)) < Integer.parseInt(o2.get(2)))
                     sol = -1;
                 else
                     sol = 1;  
@@ -202,7 +210,7 @@ public class Mercado implements Runnable {
      */
     private void muestraRanking(String cabecera, List<List<String>> resultados){
         String center = "|            %-13s                   |%n";
-        String leftAlignFormat = "| %-16s | %-11s | %-9s € |%n";
+        String leftAlignFormat = "| %-16s | %-10s | %-8s € |%n";
 
         System.out.format("+--------------------------------------------+%n");
         System.out.format(center, cabecera);
@@ -212,7 +220,7 @@ public class Mercado implements Runnable {
         resultados.forEach(resultado -> {
             System.out.format(leftAlignFormat, resultado.get(0), resultado.get(1), resultado.get(2));
         });
-        System.out.format("+---------------------------------------------+%n");
+        System.out.format("+--------------------------------------------+%n");
     }
         
     @Override
