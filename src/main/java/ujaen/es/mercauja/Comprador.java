@@ -2,7 +2,6 @@ package ujaen.es.mercauja;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import ujaen.es.mercauja.Constantes.TipoProducto;
 
@@ -10,19 +9,17 @@ import ujaen.es.mercauja.Constantes.TipoProducto;
  * Clase runnable que representa al comprador de la subasta
  * @author sjm00010
  */
-public class Comprador implements Callable<Resultado> {
+public class Comprador implements Runnable {
     // Variables
     private final String name;
     private final List<TipoProducto> productosDeseados; // Lista de productos deseados
-    private int pujaActual;
     private final List<Producto> productosComprados; // Lista de productos deseados
     private int dinero;
-    private final Catalogo memoria;
+    private final Mercado mercado;
     
-    public Comprador(String name, Catalogo memoria) {
+    public Comprador(String name, Mercado mercado) {
         this.name = "COMPRADOR("+name+")";
         this.dinero = Constantes.DINERO;
-        this.pujaActual = -1;
         
         // Inicializo la lista de productos deseados
         this.productosDeseados = new ArrayList<>();
@@ -30,38 +27,43 @@ public class Comprador implements Callable<Resultado> {
             this.productosDeseados.add(TipoProducto.getProducto());
         
         this.productosComprados = new ArrayList<>();
-        this.memoria = memoria;
+        this.mercado = mercado;
     }
     
     /**
-     * Obtiene los productos por los que esta interesado del catálogo actual
+     * Busca el producto mas barato de entre todos los deseados
      */
-    private void buscarProductos(){
+    private Producto buscarProductos(){
+        List<Producto> posiblesProductos = new ArrayList<>();
         productosDeseados.stream()
+                         .distinct()
                          .forEach(productoDeseado -> {
-                            if(pujaActual == -1)
-                                pujaActual = memoria.catalogo.indexOf(memoria.catalogo.stream()
-                                            .filter(producto -> ( !producto.isVendido() && 
-                                                                   productoDeseado == producto.getTipo() && 
-                                                                   producto.getPrecioActual() < getDinero()))
-                                            .findFirst().orElse(null));
-                                }); // Asigna -1 si no hay productos disponibles
+                            int masBarato = 0;
+                            List<Producto> productos = mercado.buscarProductos(productoDeseado, dinero);
+                            for (int i = 1; i < productos.size(); i++) {
+                                if(productos.get(masBarato).getPrecioActual() < productos.get(i).getPrecioActual()){
+                                    masBarato = i;
+                                }
+                            }
+                            posiblesProductos.add(productos.get(masBarato));
+                        });
+        
+        int masBarato = 0;
+        for (int i = 1; i < posiblesProductos.size(); i++) {
+            if(posiblesProductos.get(masBarato).getPrecioActual() < posiblesProductos.get(i).getPrecioActual()){
+                masBarato = i;
+            }
+        }
+        
+        return posiblesProductos.get(masBarato);
     }
     
     /**
      * Función para pujar por un producto
      */
     private void pujar(){
-        if(!memoria.catalogo.isEmpty()){
-            if(pujaActual == -1)
-                buscarProductos();
-            
-            while(pujaActual != -1 && !memoria.catalogo.get(pujaActual).pujar(this)){ // Para si no hay productos disponibles
-                buscarProductos(); // Se debe buscar otro producto
-            }
-        }else{
-            System.out.println( name + " no tiene productos por los que pujar" );
-        }
+        Producto puja = buscarProductos();
+        puja.pujar(this, puja.getPrecioActual()+1);
     }
     
     /**
@@ -83,18 +85,44 @@ public class Comprador implements Callable<Resultado> {
      * Presenta el informe de operaciones completadas y canceladas
      */
     private void presentaInforme(){
-        System.out.println( name + " presenta su informe");
+        System.out.println(name + " : INFORME");
         
-        if(productosComprados.size() == Constantes.NUM_PRODUCTOS)
-            System.out.println( name + " ha comprado TODOS los productos deseados");
-        else if(!productosComprados.isEmpty())
-            System.out.println( name + " ha comprado "+ productosComprados.size() + " productos deseados");
-        else
-            System.out.println( name + " no ha comprado NINGUN producto deseado");
+        int comprados = productosComprados.size(), cancelados = productosDeseados.size();
         
-        if(!productosDeseados.isEmpty())
-            System.out.println( name + " ha cancelado la compra de "+ productosDeseados.size() + " productos deseados");
+        if(productosComprados.isEmpty())
+            System.out.println(name + " PRODUCTOS COMPRADOS : NADA | DINERO RESTANTE : "+dinero+" €");
+        else{
+            int ganancia = 0;
+            ganancia = productosComprados.stream()
+                                         .map(producto -> producto.getPrecioActual())
+                                         .reduce(ganancia, Integer::sum);
+            System.out.println(name + " PRODUCTOS COMPRADOS : "+(comprados == Constantes.NUM_PRODUCTOS ? "TODOS" : comprados)+" | DINERO RESTANTE : "+ganancia+" €");
+        }
+        
+        if(cancelados != 0)
+            System.out.println(name + " COMPRAS CANCELADAS : "+ (cancelados == Constantes.NUM_PRODUCTOS ? "TODAS" : cancelados));
+    }
+    
+    @Override
+    public void run() {
+        System.out.println( name + " inicia su ejecución");
 
+        // Inicia un bucle para pujar por los productos
+        try {
+            System.out.println( name + " va a pujar por productos");
+            while(!productosDeseados.isEmpty()){
+                pujar();
+
+                // En este caso realizo una espera ocupada entre pujas para dar tiempo a que el producto cambie de precio
+                TimeUnit.MILLISECONDS.sleep(Constantes.ESPERA_COMPRADOR);
+            }
+
+            System.out.println( name + " se finaliza su ejecución");
+        }catch (InterruptedException ex) {
+            System.out.println( name + " se CANCELA su ejecución");
+        }finally{
+            presentaInforme();
+        }
     }
     
     /**
@@ -110,29 +138,4 @@ public class Comprador implements Callable<Resultado> {
     public int getDinero() {
         return dinero;
     }
-    
-    @Override
-    public Resultado call() {
-        System.out.println( name + " inicia su ejecución");
-
-        // Inicia un bucle para pujar por los productos
-        try {
-            while(!productosDeseados.isEmpty()){
-                System.out.println( name + " realiza una puja" );
-                pujar();
-                System.out.println( name + " termina de pujar, espera hasta la siguiente puja");
-
-                // En este caso realizo una espera ocupada entre pujas para dar tiempo a que el producto cambie de precio
-                TimeUnit.MILLISECONDS.sleep(Constantes.ESPERA_COMPRADOR);
-            }
-
-            System.out.println( name + " se finaliza su ejecución");
-        }catch (InterruptedException ex) {
-            System.out.println( name + " se CANCELA su ejecución");
-        }
-
-        presentaInforme();
-        
-        return new Resultado( name, productosComprados);
-    }    
 }

@@ -2,21 +2,20 @@ package ujaen.es.mercauja;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 
 /**
  * Clase runnable que representa al vendedor de la subasta
  * @author sjm00010
  */
-public class Vendedor implements Callable<Resultado> {
+public class Vendedor implements Runnable {
     // Variables
     private final String name;
     private final List<Producto> listaProductos;
     private final CountDownLatch esperaVentas;
-    private final Catalogo memoria;
+    private final Mercado mercado;
 
-    public Vendedor(String name, Catalogo memoria) {
+    public Vendedor(String name, Mercado mercado) {
         this.name = "VENDEDOR("+name+")";
         
         // Sicronización con la venta de todos los productos
@@ -25,9 +24,9 @@ public class Vendedor implements Callable<Resultado> {
         // Inicializo la lista de productos a la venta
         this.listaProductos = new ArrayList<>();
         for (int i = 0; i < Constantes.NUM_PRODUCTOS; i++)
-            this.listaProductos.add(new Producto(Constantes.TipoProducto.getProducto(), esperaVentas));
+            this.listaProductos.add(new Producto(Constantes.TipoProducto.getProducto(), this, esperaVentas));
         
-        this.memoria = memoria;
+        this.mercado = mercado;
     }
 
     /**
@@ -35,8 +34,7 @@ public class Vendedor implements Callable<Resultado> {
      */
     private void addProductos(){
         listaProductos.forEach(producto -> {
-            memoria.addProducto(producto);
-            producto.setPuestoEnVenta();
+            mercado.addProducto(producto);
         });
     }
     
@@ -44,49 +42,57 @@ public class Vendedor implements Callable<Resultado> {
      * Presenta el informe de operaciones completadas y canceladas
      */
     private void presentaInforme(){
-        System.out.println( name + " presenta su informe");
+        System.out.println(name + " : INFORME");
         
-        int vendidos = 0, cancelados = 0;
+        int vendidos = 0, cancelados = 0, ganancia = 0;
         for (Producto producto : listaProductos) {
             if(!producto.isVendido())
                 cancelados++;
-            else
+            else{
                 vendidos++;
+                ganancia += producto.getPrecioActual();
+            }
         }
         
-        if(vendidos == Constantes.NUM_PRODUCTOS)
-            System.out.println( name + " ha vendido TODOS sus productos");
-        else if(vendidos != 0)
-            System.out.println( name + " ha vendido "+ vendidos + " productos");
+        if(vendidos == 0)
+            System.out.println(name + " PRODUCTOS VENDIDOS : NADA | GANANCIAS : "+ganancia+" €");
         else
-            System.out.println( name + " no ha vendido NINGUN producto");
+            System.out.println(name + " PRODUCTOS VENDIDOS : "+ (vendidos == Constantes.NUM_PRODUCTOS ? "TODOS" : vendidos) +" | GANANCIAS : "+ganancia+" €");
         
         if(cancelados != 0)
-            System.out.println( name + " ha cancelado la venta de "+ cancelados + " productos");
-
+            System.out.println(name + " PRODUCTOS CANCELADOS : "+ (cancelados == Constantes.NUM_PRODUCTOS ? "TODOS" : cancelados));
     }
     
     @Override
-    public Resultado call() {
-        System.out.println( name + " inicia su ejecución");
+    public void run() {
+        System.out.println(getName() + " inicia su ejecución");
         
         // Lo primero que hace el vendedor es añadir los productos que quiere vender
-        System.out.println( name + " añade sus productos al catálogo");
+        System.out.println(getName() + " añade sus productos al catálogo");
         addProductos();
         
         try {
-            // Tras eso, espera a que todos los productos sean vendidos
-            System.out.println( name + " espera la venta sus productos");
+            /**
+             * Si hubiera varios mercados en este punto debería realizarse una 
+             * acción para maximizar la ganancia del vendedor
+             **/
+                    
+            // Espera a que todos los productos sean vendidos
+            System.out.println(getName() + " espera la venta sus productos");
             esperaVentas.await();
             
-            System.out.println( name + " finaliza su ejecución");
+            System.out.println(getName() + " finaliza su ejecución");
         } catch (InterruptedException ex) {
-            System.out.println( name + " se CANCELA su ejecución");
+            System.out.println(getName() + " se CANCELA su ejecución");
         }finally{
             presentaInforme();
         }
-        
-        return new Resultado( name, listaProductos);
     }
     
+    /**
+     * @return Nombre del vendedor
+     */
+    public String getName() {
+        return name;
+    }
 }

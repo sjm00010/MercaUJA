@@ -60,9 +60,9 @@ public interface Constantes {
     // Constantes del problema
     public static final int PRECIO_MINIMO = 1;
     public static final int TIEMPO_PUJAS = 1000; // milisegundos
-    public static final int VARIACION_PUJAS = 2000; // milisegundos
+    public static final int VARIACION_PUJAS = 9000; // milisegundos
     public static final int ESPERA_COMPRADOR = 500; // milisegundos
-    public static final int TIEMPO_SUBASTA = 25000; // milisegundos, 3 min
+    public static final int TIEMPO_SUBASTA = 25000; // milisegundos
     public static final int NUM_VENDEDORES = 10;
     public static final int NUM_COMPRADORES = 15;
     public static final int NUM_PRODUCTOS = 20;

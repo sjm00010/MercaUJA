@@ -1,10 +1,15 @@
 package ujaen.es.mercauja;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+import ujaen.es.mercauja.Constantes.TipoProducto;
 
 /**
  * Clase runnable que representa la subasta
@@ -12,18 +17,60 @@ import java.util.concurrent.ExecutorService;
  */
 public class Mercado implements Runnable {
     // Variables
+    private final List<Producto> catalogo;
     private final List<String> registro;
-    private final List<Resultado> ranking;
-    private final CompletionService<Resultado> service;
+    
+    // Sinconización
+    private final CountDownLatch avisaFinalizacion;
+    
+    // Ejecución de los servicios
     private final ExecutorService ejecutor;
-    private final Catalogo memoria;
-
-    public Mercado(ExecutorService ejecutorCompletionService, CompletionService<Resultado> service, Catalogo memoria) {
+    
+    // Exclusión mutua para el catálogo
+    private final ReentrantLock lockCatalogo;
+    private final ReentrantLock lockRegistro;
+    
+    public Mercado(CountDownLatch avisaFinalizacion) {
+        this.catalogo = new ArrayList<>();
         this.registro = new ArrayList<>();
-        this.ranking = new ArrayList<>();
-        this.ejecutor = ejecutorCompletionService;
-        this.service = service;
-        this.memoria = memoria;
+        this.ejecutor = Executors.newCachedThreadPool();
+        this.lockCatalogo = new ReentrantLock();
+        this.lockRegistro = new ReentrantLock();
+        this.avisaFinalizacion = avisaFinalizacion;
+    }
+    
+    /**
+     * Función para añadir nuevos productos al catálogo
+     * @param newProducto Producto a añadir
+     */
+    public void addProducto(Producto newProducto){
+        TareaAddCatalogo anadirCatalogo = new TareaAddCatalogo(catalogo, registro, newProducto, lockCatalogo, lockRegistro);
+        ejecutor.execute(anadirCatalogo);
+    }
+    
+    /**
+     * Busca los productos del catálogo que sean del tipo deseado y se ajusten al precio
+     * @param tipoBuscado Tipo de producto buscado
+     * @param precioMax Precio maximo del producto (sin incluir)
+     * @return Lista de productos que cumplen las condiciones
+     */
+    public List<Producto> buscarProductos(TipoProducto tipoBuscado, int precioMax){
+        return catalogo.stream()
+                       .filter( p -> !p.isVendido() && 
+                                      p.getTipo().equals(tipoBuscado) &&
+                                      p.getPrecioActual() < precioMax)
+                       .toList();
+    }
+    
+    /**
+     * Función para pujar por un producto del catálogo
+     * @param comprador Comprador que realiza la puja
+     * @param producto Producto por el que se puja
+     * @param precio Precio de la puja
+     */
+    public void pujar(Comprador comprador, Producto producto, int precio){
+        TareaPujar puja = new TareaPujar(registro, comprador, producto, precio, lockRegistro);
+        ejecutor.execute(puja);
     }
 
     /**
@@ -35,110 +82,162 @@ public class Mercado implements Runnable {
                        .reduce(String::concat)
                        .orElse("");
     }
-
-    /**
-     * Registra una interacción en el mercado
-     * @param entrada Entrada que se desea añadir al registro
-     */
-    public void addRegistro(String entrada) {
-        this.registro.add(entrada);
-    }
     
     /**
-     * Obtiene los resultados de los Vendedores y Compradores tras cerrar el mercado
-     * @throws InterruptedException Excepción lanzada por la interrupción del hilo
-     * @throws ExecutionException Excepción lanzada por la interrupción del hilo
-     */
-    private void obtenerResultados() throws InterruptedException, ExecutionException {
-        Resultado resultado;
-        resultado = service.take().get();
-        ranking.add(resultado);               
-    }
-    
-    /**
-     * Función que presenta el ranking de los vendedores
+     * Funcián que calcula los datos para el ranking de los vendedores
      */
     private void rankingVendedores(){
-        List<Resultado> listaVendedores = 
-            ranking.stream()
-                   .filter( r -> r.esVendedor())
-                   .sorted((o1, o2) -> {
-                        int resultado = 0;
-                        if(o1.getTotalProductos() == o2.getTotalProductos()){
-                            resultado = o1.getDinero() > o2.getDinero() ? -1 : 1;
-                        }else{
-                            resultado = o1.getTotalProductos() > o2.getTotalProductos() ? -1 : 1;
-                        }
+        Map<String, List<String>> vendedores = new HashMap<>();
+        
+        catalogo.stream()
+                .filter( producto -> producto.isVendido())
+                .forEach(producto -> {
+                    String nombre = producto.getVendedor().getName();
+                    if(!vendedores.containsKey(nombre)){
+                        List<String> aux = new ArrayList<>();
+                        aux.add("1");// Productos
+                        aux.add(Integer.toString(producto.getPrecioActual()));// Productos
+                        vendedores.put(nombre, aux);
+                    }else{
+                        String productos = vendedores.get(nombre).get(0);
+                        String dinero = vendedores.get(nombre).get(1);
 
-                        return resultado;
-                    })
-                    .toList();
-        System.out.println("MERCADO : Ranking de los vendedores");
-        for (int i = 0; i < listaVendedores.size(); i++) {
-            System.out.println("Posición "+(i+1)+" : "+ listaVendedores.get(i).getNombre() + 
-                    " | Productos vendidos: "+ listaVendedores.get(i).getTotalProductos() +
-                    " | Dinero ganado: "+ listaVendedores.get(i).getDinero());
-        }
+                        productos = Integer.toString(Integer.parseInt(productos) + 1);
+                        dinero = Integer.toString(Integer.parseInt(dinero) + producto.getPrecioActual());
+
+                        vendedores.get(nombre).set(0, productos);
+                        vendedores.get(nombre).set(1, dinero);
+                    }
+        });
+        
+        List<List<String>> resultado = new ArrayList();
+        
+        vendedores.forEach((clave, valor) -> {
+            List<String> aux = new ArrayList<>();
+            aux.add(clave);
+            aux.addAll(valor);
+            resultado.add(aux);
+        });
+        
+        resultado.sort((o1, o2) -> {
+            int sol = 0;
+            if(Integer.parseInt(o1.get(1)) != Integer.parseInt(o2.get(1))){
+                if(Integer.parseInt(o1.get(1)) > Integer.parseInt(o2.get(1)))
+                    sol = -1;
+                else
+                    sol = 1;
+            }else if(Integer.parseInt(o1.get(2)) != Integer.parseInt(o2.get(2))){
+                if(Integer.parseInt(o1.get(2)) > Integer.parseInt(o2.get(2)))
+                    sol = -1;
+                else
+                    sol = 1;  
+            }
+            
+            return sol;
+        });
+        
+        muestraRanking("VENDEDORES", resultado);
     }
     
     /**
-     * Función que presenta el ranking de los compradores
+     * Funcián que calcula los datos para el ranking de los compradores
      */
     private void rankingCompradores(){
-        List<Resultado> listaCompradores = 
-            ranking.stream()
-                   .filter( r -> !r.esVendedor())
-                   .sorted((o1, o2) -> {
-                        int resultado = 0;
-                        if(o1.getTotalProductos() == o2.getTotalProductos()){
-                            resultado = o1.getDinero() > o2.getDinero() ? -1 : 1;
-                        }else{
-                            resultado = o1.getTotalProductos() > o2.getTotalProductos() ? -1 : 1;
-                        }
+        Map<String, List<String>> compradores = new HashMap<>();
+        
+        catalogo.stream()
+                .filter( producto -> producto.isVendido())
+                .forEach(producto -> {
+                    String nombre = producto.getComprador().getName();
+                    if(!compradores.containsKey(nombre)){
+                        List<String> aux = new ArrayList<>();
+                        aux.add("1");// Productos
+                        aux.add(Integer.toString(producto.getPrecioActual()));// Productos
+                        compradores.put(nombre, aux);
+                    }else{
+                        String productos = compradores.get(nombre).get(0);
+                        String dinero = compradores.get(nombre).get(1);
 
-                        return resultado;
-                    })
-                    .toList();
-        System.out.println("MERCADO : Ranking de los compradores");
-        for (int i = 0; i < listaCompradores.size(); i++) {
-            System.out.println("Posición "+(i+1)+" : "+ listaCompradores.get(i).getNombre() + 
-                    " | Productos comprados: "+ listaCompradores.get(i).getTotalProductos() +
-                    " | Dinero gastado: "+ listaCompradores.get(i).getDinero());
-        }
+                        productos = Integer.toString(Integer.parseInt(productos) + 1);
+                        dinero = Integer.toString(Integer.parseInt(dinero) + producto.getPrecioActual());
+
+                        compradores.get(nombre).set(0, productos);
+                        compradores.get(nombre).set(1, dinero);
+                    }
+        });
+        
+        List<List<String>> resultado = new ArrayList();
+        
+        compradores.forEach((clave, valor) -> {
+            List<String> aux = new ArrayList<>();
+            aux.add(clave);
+            aux.addAll(valor);
+            resultado.add(aux);
+        });
+        
+        resultado.sort((o1, o2) -> {
+            int sol = 0;
+            if(Integer.parseInt(o1.get(1)) != Integer.parseInt(o2.get(1))){
+                if(Integer.parseInt(o1.get(1)) > Integer.parseInt(o2.get(1)))
+                    sol = -1;
+                else
+                    sol = 1;
+            }else if(Integer.parseInt(o1.get(2)) != Integer.parseInt(o2.get(2))){
+                if(Integer.parseInt(o1.get(2)) > Integer.parseInt(o2.get(2)))
+                    sol = -1;
+                else
+                    sol = 1;  
+            }
+            
+            return sol;
+        });
+        
+        muestraRanking("COMPRADORES", resultado);
     }
     
+    /**
+     * Función que muestra por pantalla una tabla con el ranking
+     * @param cabecera Cabecera del ranking
+     * @param resultados Resultados a mostrar
+     */
+    private void muestraRanking(String cabecera, List<List<String>> resultados){
+        String center = "|            %-13s                   |%n";
+        String leftAlignFormat = "| %-16s | %-11s | %-9s € |%n";
+
+        System.out.format("+--------------------------------------------+%n");
+        System.out.format(center, cabecera);
+        System.out.format("+------------------+------------+------------+%n");
+        System.out.format("| Nombre           | Productos  | Dinero     |%n");
+        System.out.format("+------------------+------------+------------+%n");
+        resultados.forEach(resultado -> {
+            System.out.format(leftAlignFormat, resultado.get(0), resultado.get(1), resultado.get(2));
+        });
+        System.out.format("+---------------------------------------------+%n");
+    }
+        
     @Override
     public void run() {
         // Variables
-        long inicio;
+        CountDownLatch cerrar;
         
         // Ejecución del hilo
         System.out.println("MERCADO comienza la ejecución");
         
         // Inicialización de las variables
-        inicio = System.currentTimeMillis();
+        cerrar = new CountDownLatch(1); // Paraesèrar la tarea de cerrar el mercado
         
         try {
+            // Creo la tarea de cancelación
+            TareaCerrarMercado tareaCancelar = new TareaCerrarMercado(cerrar);
             
-            // Inicio el bucle para ir comprobando el estado de los productos del catalogo
-            while(System.currentTimeMillis()-inicio < Constantes.TIEMPO_SUBASTA){
-                memoria.catalogo.stream()
-                                .filter(p -> !p.isVendido())
-                                .toList()
-                                .forEach(p -> {
-                                    if(p.tiempoVencido()){
-                                        p.setVendido();
-                                        addRegistro("Se ha vendido el producto: "+p.toString());
-                                    }
-                });
-            }
-        
+            // La añado al ejecutor
+            ejecutor.execute(tareaCancelar);
+            
+            // Espero hasta que la tarea de cancelación avise de que se debe cerrar
+            cerrar.await(Constantes.TIEMPO_SUBASTA, TimeUnit.MINUTES);
+            
             System.out.println("MERCADO ha CERRADO, va a cancelar las operaciones restantes");
             ejecutor.shutdownNow();
-                    
-            for (int i = 0; i < Constantes.NUM_COMPRADORES + Constantes.NUM_VENDEDORES; i++) {
-                obtenerResultados();
-            }
             
             System.out.println("MERCADO va ha presentar los rankins");
             rankingVendedores();
@@ -146,8 +245,10 @@ public class Mercado implements Runnable {
 		
             // Finalización del hilo
             System.out.println("MERCADO ha finalizado la ejecución");
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException ex) {
             System.out.println("MERCADO ha CANCELADO su ejecución");
+        }finally{
+            avisaFinalizacion.countDown();
         }
     }
 }

@@ -13,9 +13,9 @@ public class Producto {
     private final TipoProducto tipo;
     private int precioActual;
     private Comprador comprador;
+    private final Vendedor vendedor;
     private boolean vendido;
-    private long puestoEnVenta;
-    private long tiempo;
+    private final long tiempo;
     
     // Excusión mutua para el precio
     private final ReentrantLock lock;
@@ -26,12 +26,14 @@ public class Producto {
     /**
      * Constructor de producto para vendedor
      * @param tipo Tipo de producto a crear
+     * @param vendedor Vendedor que oferta el producto
      * @param esperaVentas CountDownLatch para la sinconización con Vendedor
      */
-    public Producto( TipoProducto tipo, CountDownLatch esperaVentas) {
+    public Producto( TipoProducto tipo, Vendedor vendedor, CountDownLatch esperaVentas) {
         this.tipo = tipo;
         this.precioActual = tipo.getPrecio(tipo);
         this.comprador = null;
+        this.vendedor = vendedor;
         this.vendido = false;
         this.lock = new ReentrantLock();
         this.esperaVentas = esperaVentas;
@@ -60,16 +62,17 @@ public class Producto {
     /**
      * Establece el precio actual para el producto en función de la puja más alta
      * @param comprador Comprador que realiza la puja
+     * @param precio Nuevo precio del producto
      * @return True si la puja se realizo correctamente, False en caso contrario
      */
-    public boolean pujar(Comprador comprador) {
+    public boolean pujar(Comprador comprador, int precio) {
         boolean Ok = false;
         lock.lock();  // Bloquea mientras se edita el precio
         try {
-            if( equalComprador(comprador))
+            if( this.comprador.getName().equals(comprador.getName()) )
                 Ok = true;
-            else if(comprador.getDinero() > precioActual){
-                precioActual++;
+            else if(comprador.getDinero() >= precio && precio > precioActual){
+                precioActual = precio;
                 this.comprador = comprador;
                 Ok = true;
             }
@@ -95,46 +98,43 @@ public class Producto {
      * Establece el producto como vendido
      */
     public void setVendido() {
-        lock.lock();  // Bloquea mientras se edita el precio
-        try {
-            this.vendido = true;
-            if(this.comprador != null)
-                this.comprador.notificarCompra(this);
-        } finally {
-            if(esperaVentas != null) 
-                esperaVentas.countDown();
-            lock.unlock();
+        if(comprador != null){
+            lock.lock();  // Bloquea mientras se edita el precio
+            try {
+                this.vendido = true;
+                if(this.comprador != null)
+                    this.comprador.notificarCompra(this);
+            } finally {
+                if(esperaVentas != null) 
+                    esperaVentas.countDown();
+                lock.unlock();
+            }
         }
     }
-    
-    /**
-     * Funcion que compara dos compradores para determinar si son el mismo
-     * @param comprador Nuevo comprador
-     * @return True si son el mismo, false en caso contrario
-     */
-    public boolean equalComprador(Comprador comprador){
-        return  this.comprador != null ? this.comprador.equals(comprador) : false;
-    }
 
     /**
-     * Establece el tiempo actual como el tiempo en que se puso a la venta
-     */
-    public void setPuestoEnVenta() {
-        this.puestoEnVenta = System.currentTimeMillis();
-    }
-    
-    /**
-     * Indica se el tiempo de puesta a la venta
-     * @return True si el tiempo se ha cumplido, False en caso contrario
-     */
-    public boolean tiempoVencido(){
-        return tiempo <= System.currentTimeMillis()-puestoEnVenta;
-    }
-
-    /**
-     * @return the comprador
+     * @return Último comprador que pujo
      */
     public Comprador getComprador() {
         return comprador;
+    }
+
+    /**
+     * @return Vendedor del producto
+     */
+    public Vendedor getVendedor() {
+        return vendedor;
+    }
+
+    /**
+     * @return Tiempo de puja
+     */
+    public long getTiempo() {
+        return tiempo;
+    }
+    
+    @Override
+    public String toString(){
+        return "PRODUCTO DEL "+getVendedor().getName()+" : "+precioActual+" € | "+ (vendido ? "VENDIDO" : "CANCELADO");
     }
 }
