@@ -5,8 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import ujaen.es.mercauja.Constantes.TipoProducto;
@@ -24,7 +24,7 @@ public class Mercado implements Runnable {
     private final CountDownLatch avisaFinalizacion;
     
     // Ejecución de los servicios
-    private final ExecutorService ejecutor;
+    private final ScheduledExecutorService ejecutor;
     
     // Exclusión mutua para el catálogo
     private final ReentrantLock lockCatalogo;
@@ -33,7 +33,7 @@ public class Mercado implements Runnable {
     public Mercado(CountDownLatch avisaFinalizacion) {
         this.catalogo = new ArrayList<>();
         this.registro = new ArrayList<>();
-        this.ejecutor = Executors.newCachedThreadPool();
+        this.ejecutor = Executors.newScheduledThreadPool(Constantes.NUM_PROCESOS);
         this.lockCatalogo = new ReentrantLock();
         this.lockRegistro = new ReentrantLock();
         this.avisaFinalizacion = avisaFinalizacion;
@@ -225,27 +225,18 @@ public class Mercado implements Runnable {
         
     @Override
     public void run() {
-        // Variables
-        CountDownLatch cerrar;
-        
         // Ejecución del hilo
         System.out.println("MERCADO comienza la ejecución");
         
-        // Inicialización de las variables
-        cerrar = new CountDownLatch(1); // Para esperar la tarea de cerrar el mercado
-        
         try {
             // Creo la tarea de cancelación
-            TareaCerrarMercado tareaCancelar = new TareaCerrarMercado(cerrar);
+            TareaCerrarMercado tareaCancelar = new TareaCerrarMercado(ejecutor);
             
             // La añado al ejecutor
-            ejecutor.execute(tareaCancelar);
+            ejecutor.schedule(tareaCancelar, Constantes.TIEMPO_SUBASTA, TimeUnit.MILLISECONDS);
             
-            // Espero hasta que la tarea de cancelación avise de que se debe cerrar
-            cerrar.await(Constantes.TIEMPO_SUBASTA, TimeUnit.MINUTES);
-            
-            System.out.println("MERCADO ha CERRADO, va a cancelar las operaciones restantes");
-            ejecutor.shutdownNow();
+            ejecutor.awaitTermination(Constantes.TIEMPO_SUBASTA, TimeUnit.SECONDS);
+            System.out.println("MERCADO ha CERRADO");
             
             System.out.println("MERCADO va ha presentar los rankins");
             rankingVendedores();

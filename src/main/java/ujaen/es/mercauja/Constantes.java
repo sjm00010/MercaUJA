@@ -67,4 +67,5 @@ public interface Constantes {
     public static final int NUM_COMPRADORES = 15;
     public static final int NUM_PRODUCTOS = 5;
     public static final int DINERO = 800;
+    public static final int NUM_PROCESOS = 100;
 }

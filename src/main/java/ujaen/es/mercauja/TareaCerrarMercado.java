@@ -1,27 +1,21 @@
 package ujaen.es.mercauja;
 
-import static java.lang.Thread.sleep;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 
 /**
  * Tarea para cerrar el mercado
  * @author sjm00010
  */
 public class TareaCerrarMercado implements Runnable {
-    private final CountDownLatch cerrar;
+    private final ExecutorService cerrar;
 
-    public TareaCerrarMercado(CountDownLatch cerrar) {
+    public TareaCerrarMercado(ExecutorService cerrar) {
         this.cerrar = cerrar;
     }
 
     @Override
     public void run() {
-        try {
-            sleep(Constantes.TIEMPO_SUBASTA);
-        } catch (InterruptedException ex) {
-            System.out.println("Hilo(TareaCerrarMercado) CANCELA la ejecución");
-        }finally{
-            cerrar.countDown();
-        }
+        System.out.println("Hilo(TareaCerrarMercado) : el MERCADO va ha CERRAR, CANCELANDO las tareas pendientes");
+        cerrar.shutdown();
     }
 }
