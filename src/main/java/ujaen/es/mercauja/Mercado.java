@@ -232,7 +232,7 @@ public class Mercado implements Runnable {
         System.out.println("MERCADO comienza la ejecución");
         
         // Inicialización de las variables
-        cerrar = new CountDownLatch(1); // Paraesèrar la tarea de cerrar el mercado
+        cerrar = new CountDownLatch(1); // Para esperar la tarea de cerrar el mercado
         
         try {
             // Creo la tarea de cancelación
