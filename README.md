@@ -2,7 +2,7 @@
 Mercado de subastas, como Ebay, donde los vendedores publican anuncios del producto que quieren vender y que podrán adquirir los compradores.
 
 ## Análisis
-A continuación, detallaré como he dedicidido que se comportan cada una de las clases.
+A continuación, detallaré aspectos relevantes para entender el funcionamiento del proyecto:
 
 ### Producto
 El producto se compone de:
@@ -39,6 +39,6 @@ Una vez inicializado, el comprador intenta pujar. Si hay productos en el catálo
 El mercado se compone de:
 - *registro* : lista de entradas con las operaciones realizadas (venta de los productos).
 - *catalogo* : lista de productos en venta en el mercado.
-- *ejecutor* : ExecutorService donde se ejecutan las tareas para dar servicios a los vendedores y los compradores.
+- *ejecutor* : ScheduledExecutorService donde se ejecutan las tareas para dar servicios a los vendedores y los compradores.
 
-Cuando el mercado se inicia crea la tarea que le avise del cierre del mercado, después de eso espera a que la tarea avise del cierre del mismo. Los vendedores y compradores van solicitando servicios al mercado, y este va creando tareas que satisfagan estos servicios. Tras el cierre del mercado cancela los procesos restantes (vendedores y compradores), obtiene sus resultados y presenta el ranking de vendedores y compradores.
+Cuando el mercado se inicia crea la tarea que para el cierre del mismo, después de eso espera a que la tarea se active y cancele las tareas activos en ese momento. Los vendedores y compradores van solicitando servicios al mercado, y este va creando tareas que satisfagan estos servicios. Cuando finalizan todas las tareas el mercado presenta el ranking de vendedores y compradores.
